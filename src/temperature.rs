@@ -248,7 +248,7 @@ impl SmcCache {
         Some(SmcCache { smc, cpu_keys, gpu_keys })
     }
 
-    fn read_temps(&self) -> Temps {
+    fn read_temps(&self, want_cpu: bool, want_gpu: bool) -> Temps {
         let avg = |keys: &[(u32, SmcKeyInfo)]| -> Option<f32> {
             let mut sum = 0f32;
             let mut n = 0u32;
@@ -264,8 +264,8 @@ impl SmcCache {
         };
 
         Temps {
-            cpu: avg(&self.cpu_keys),
-            gpu: avg(&self.gpu_keys),
+            cpu: if want_cpu { avg(&self.cpu_keys) } else { None },
+            gpu: if want_gpu { avg(&self.gpu_keys) } else { None },
         }
     }
 }
@@ -277,7 +277,10 @@ pub struct Temps {
     pub gpu: Option<f32>,
 }
 
-pub fn read_temps() -> Temps {
+pub fn read_temps(want_cpu: bool, want_gpu: bool) -> Temps {
+    if !want_cpu && !want_gpu {
+        return Temps { cpu: None, gpu: None };
+    }
     let mut guard = CACHE
         .get_or_init(|| Mutex::new(None))
         .lock()
@@ -288,7 +291,7 @@ pub fn read_temps() -> Temps {
     }
 
     match guard.as_ref() {
-        Some(cache) => cache.read_temps(),
+        Some(cache) => cache.read_temps(want_cpu, want_gpu),
         None => Temps { cpu: None, gpu: None },
     }
 }
@@ -298,7 +301,7 @@ mod tests {
     use super::*;
     #[test]
     fn smc_reads_temps() {
-        let temps = read_temps();
+        let temps = read_temps(true, true);
         let cpu = temps.cpu.expect("expected CPU temperature from SMC");
         let gpu = temps.gpu.expect("expected GPU temperature from SMC");
         assert!((1.0..120.0).contains(&cpu), "CPU temp {cpu} out of range");
