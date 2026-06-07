@@ -1,3 +1,4 @@
+mod metrics;
 mod temperature;
 
 use std::time::{Duration, Instant};
@@ -12,7 +13,7 @@ use winit::window::WindowId;
 #[cfg(target_os = "macos")]
 use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
 
-const POLL_INTERVAL: Duration = Duration::from_secs(5);
+const POLL_INTERVAL: Duration = Duration::from_secs(3);
 
 struct App {
     tray: Option<TrayIcon>,
@@ -53,9 +54,15 @@ impl ApplicationHandler for App {
         if self.last_poll.elapsed() >= POLL_INTERVAL {
             if let Some(tray) = &mut self.tray {
                 let temps = temperature::read_temps();
-                let cpu = temps.cpu.map_or("--".into(), |t| format!("{:.0}°", t));
-                let gpu = temps.gpu.map_or("--".into(), |t| format!("{:.0}°", t));
-                tray.set_title(Some(format!("CPU {}  GPU {}", cpu, gpu)));
+                let m = metrics::read_metrics();
+                let cpu_temp = temps.cpu.map_or("--".into(), |t| format!("{:.0}°", t));
+                let gpu_temp = temps.gpu.map_or("--".into(), |t| format!("{:.0}°", t));
+                let cpu_pct = m.cpu_pct.map_or("--".into(), |p| format!("{:.0}%", p));
+                let ram = format!("{:.1}/{:.0}G", m.ram_used_gb, m.ram_total_gb);
+                tray.set_title(Some(format!(
+                    "CPU {} {}  GPU {}  RAM {}",
+                    cpu_temp, cpu_pct, gpu_temp, ram
+                )));
             }
             self.last_poll = Instant::now();
         }
@@ -66,9 +73,7 @@ impl ApplicationHandler for App {
             }
         }
 
-        event_loop.set_control_flow(ControlFlow::WaitUntil(
-            Instant::now() + POLL_INTERVAL,
-        ));
+        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + POLL_INTERVAL));
     }
 }
 
