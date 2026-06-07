@@ -6,7 +6,7 @@
 
 A minimal macOS menu bar app that shows system stats. Written in Rust.
 
-I built this because every stat app I tried — iStatMenus, Stats, TopNotch — felt absurdly heavy for what they do: read a few numbers and put them in the menu bar. Vapor does the same thing in a few hundred lines of Rust with a fraction of the footprint.
+I built this because every stat app I tried seems to hog a lot of resources themselves - I wanted an app that does not peek at me when I inspect my resource monitor. Vapor does this in a few hundred lines of Rust with a fraction of the footprint of other apps.
 
 > **Note:** Only tested on Apple M5 Pro. Apple Silicon is required for the GPU temperature and usage readings (they rely on SMC keys and IOAccelerator properties that differ on Intel).
 
@@ -16,11 +16,11 @@ I built this because every stat app I tried — iStatMenus, Stats, TopNotch — 
 
 Approximate idle footprint compared to popular alternatives:
 
-| App | Memory | CPU (idle) |
-|---|---|---|
-| iStatMenus | ~100–200 MB | 3–4%, peaking ~10% |
-| Stats (open source) | ~100–200 MB | 3–4%, peaking ~10% |
-| **Vapor** | **~25 MB** | **~0%** |
+| App | Memory | CPU (idle) | Size on disk |
+|---|---|---|---|
+| iStatMenus | ~100–200 MB | 3–8% | 66 MB |
+| Stats (open source) | ~100–200 MB | 2–6% | 42 MB |
+| **Vapor** | **~20 MB** | **~0.3%** | **500 KB** |
 
 Vapor polls every 5 seconds and does nothing in between. No background threads, no telemetry, no Electron.
 
