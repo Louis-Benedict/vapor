@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-tray-icon = "0.19"
 winit = "0.30"
 muda = "0.15"
+objc2 = "0.5"
 
 [profile.release]
 opt-level = "s"      # optimise for size, not speed (computation is trivial)

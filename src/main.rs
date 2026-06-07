@@ -1,10 +1,11 @@
 mod metrics;
+mod statusbar;
 mod temperature;
 
 use std::time::{Duration, Instant};
 
 use muda::{accelerator::Accelerator, CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
-use tray_icon::{TrayIcon, TrayIconBuilder};
+use statusbar::{BoxSpec, StatusBar};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -15,27 +16,28 @@ use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
 
-// Toggle indices
 const T_CPU_TEMP: usize = 0;
 const T_GPU_TEMP: usize = 1;
-const T_CPU_USE: usize = 2;
-const T_GPU_USE: usize = 3;
-const T_RAM: usize = 4;
+const T_CPU_USE:  usize = 2;
+const T_GPU_USE:  usize = 3;
+const T_RAM:      usize = 4;
 
 struct App {
-    tray: Option<TrayIcon>,
-    quit_id: Option<muda::MenuId>,
-    toggles: [Option<CheckMenuItem>; 5],
-    last_poll: Instant,
+    statusbar: Option<StatusBar>,
+    menu:      Option<Menu>,
+    quit_id:   Option<muda::MenuId>,
+    toggles:   [Option<CheckMenuItem>; 5],
+    last_poll:  Instant,
 }
 
 impl App {
     fn new() -> Self {
         Self {
-            tray: None,
-            quit_id: None,
-            toggles: [None, None, None, None, None],
-            last_poll: Instant::now() - POLL_INTERVAL,
+            statusbar: None,
+            menu:      None,
+            quit_id:   None,
+            toggles:   [None, None, None, None, None],
+            last_poll:  Instant::now() - POLL_INTERVAL,
         }
     }
 
@@ -50,12 +52,11 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, _event_loop: &ActiveEventLoop) {
-        if self.tray.is_some() {
+        if self.statusbar.is_some() {
             return;
         }
 
         let check = |label| CheckMenuItem::new(label, true, true, None::<Accelerator>);
-
         let cpu_temp = check("CPU Temperature");
         let gpu_temp = check("GPU Temperature");
         let cpu_use  = check("CPU Usage");
@@ -82,12 +83,8 @@ impl ApplicationHandler for App {
             Some(ram),
         ];
 
-        self.tray = Some(
-            TrayIconBuilder::new()
-                .with_menu(Box::new(menu))
-                .build()
-                .expect("failed to create tray icon"),
-        );
+        self.statusbar = Some(StatusBar::new(&menu));
+        self.menu      = Some(menu);
     }
 
     fn window_event(&mut self, _: &ActiveEventLoop, _: WindowId, _: WindowEvent) {}
@@ -99,7 +96,6 @@ impl ApplicationHandler for App {
                 return;
             }
             if self.is_toggle(&ev.id) {
-                // Force an immediate re-poll so the title reflects the change at once.
                 self.last_poll = Instant::now() - POLL_INTERVAL;
             }
         }
@@ -111,57 +107,51 @@ impl ApplicationHandler for App {
             let want_gpu_use  = self.on(T_GPU_USE);
             let want_ram      = self.on(T_RAM);
 
-            if let Some(tray) = &mut self.tray {
+            let temps = temperature::read_temps(want_cpu_temp, want_gpu_temp);
+            let m = metrics::read_metrics(metrics::MetricsFlags {
+                cpu_usage: want_cpu_use,
+                gpu_usage: want_gpu_use,
+                ram:       want_ram,
+            });
 
-                let temps = temperature::read_temps(want_cpu_temp, want_gpu_temp);
-                let m = metrics::read_metrics(metrics::MetricsFlags {
-                    cpu_usage: want_cpu_use,
-                    gpu_usage: want_gpu_use,
-                    ram: want_ram,
-                });
+            let mut boxes: Vec<BoxSpec<'_>> = Vec::new();
 
-                let mut parts: Vec<String> = Vec::new();
+            let cpu_val = (want_cpu_temp || want_cpu_use).then(|| match (want_cpu_temp, want_cpu_use) {
+                (true,  true)  => format!(
+                    "{}/{}",
+                    temps.cpu.map_or("--".into(), |t| format!("{:.0}°", t)),
+                    m.cpu_pct.map_or("--".into(), |p| format!("{:.0}%", p)),
+                ),
+                (true,  false) => temps.cpu.map_or("--".into(), |t| format!("{:.0}°", t)),
+                (false, true)  => m.cpu_pct.map_or("--".into(), |p| format!("{:.0}%", p)),
+                _              => unreachable!(),
+            });
+            if let Some(ref v) = cpu_val { boxes.push(BoxSpec { label: "CPU", value: v }); }
 
-                if want_cpu_temp || want_cpu_use {
-                    let mut s = "CPU".to_string();
-                    if want_cpu_temp {
-                        s += &temps.cpu.map_or(" --".into(), |t| format!(" {:.0}°", t));
-                    }
-                    if want_cpu_use {
-                        s += &m.cpu_pct.map_or(" --".into(), |p| format!(" {:.0}%", p));
-                    }
-                    parts.push(s);
-                }
+            let gpu_val = (want_gpu_temp || want_gpu_use).then(|| match (want_gpu_temp, want_gpu_use) {
+                (true,  true)  => format!(
+                    "{}/{}",
+                    temps.gpu.map_or("--".into(), |t| format!("{:.0}°", t)),
+                    m.gpu_pct.map_or("--".into(), |p| format!("{:.0}%", p)),
+                ),
+                (true,  false) => temps.gpu.map_or("--".into(), |t| format!("{:.0}°", t)),
+                (false, true)  => m.gpu_pct.map_or("--".into(), |p| format!("{:.0}%", p)),
+                _              => unreachable!(),
+            });
+            if let Some(ref v) = gpu_val { boxes.push(BoxSpec { label: "GPU", value: v }); }
 
-                if want_gpu_temp || want_gpu_use {
-                    let mut s = "GPU".to_string();
-                    if want_gpu_temp {
-                        s += &temps.gpu.map_or(" --".into(), |t| format!(" {:.0}°", t));
-                    }
-                    if want_gpu_use {
-                        s += &m.gpu_pct.map_or(" --".into(), |p| format!(" {:.0}%", p));
-                    }
-                    parts.push(s);
-                }
+            let ram_val = want_ram
+                .then(|| format!("{:.1}/{:.0}G", m.ram_used_gb, m.ram_total_gb));
+            if let Some(ref v) = ram_val { boxes.push(BoxSpec { label: "RAM", value: v }); }
 
-                if want_ram {
-                    parts.push(format!("RAM {:.1}/{:.0}G", m.ram_used_gb, m.ram_total_gb));
-                }
-
-                let title = if parts.is_empty() {
-                    "stamon".into()
-                } else {
-                    parts.join("  ")
-                };
-
-                tray.set_title(Some(title));
+            if let Some(sb) = &self.statusbar {
+                sb.update(&boxes);
             }
+
             self.last_poll = Instant::now();
         }
 
-        event_loop.set_control_flow(ControlFlow::WaitUntil(
-            Instant::now() + POLL_INTERVAL,
-        ));
+        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + POLL_INTERVAL));
     }
 }
 
@@ -175,7 +165,5 @@ fn main() {
     #[cfg(not(target_os = "macos"))]
     let event_loop = EventLoop::new().expect("failed to create event loop");
 
-    event_loop
-        .run_app(&mut App::new())
-        .expect("event loop error");
+    event_loop.run_app(&mut App::new()).expect("event loop error");
 }
