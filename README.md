@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="logo.svg" width="180" alt="stamon logo" />
+  <img src="logo.svg" width="180" alt="Vapor logo" />
 </p>
 
-# stamon
+# Vapor
 
 A minimal macOS menu bar app that shows system stats. Written in Rust.
 
-I built this because every stat app I tried — iStatMenus, Stats, TopNotch — felt absurdly heavy for what they do: read a few numbers and put them in the menu bar. stamon does the same thing in a few hundred lines of Rust with a fraction of the footprint.
+I built this because every stat app I tried — iStatMenus, Stats, TopNotch — felt absurdly heavy for what they do: read a few numbers and put them in the menu bar. Vapor does the same thing in a few hundred lines of Rust with a fraction of the footprint.
 
 > **Note:** Only tested on Apple M5 Pro. Apple Silicon is required for the GPU temperature and usage readings (they rely on SMC keys and IOAccelerator properties that differ on Intel).
 
@@ -20,17 +20,17 @@ Approximate idle footprint compared to popular alternatives:
 |---|---|---|
 | iStatMenus | ~100–200 MB | 3–4%, peaking ~10% |
 | Stats (open source) | ~100–200 MB | 3–4%, peaking ~10% |
-| **stamon** | **~25 MB** | **~0%** |
+| **Vapor** | **~25 MB** | **~0%** |
 
-stamon polls every 5 seconds and does nothing in between. No background threads, no telemetry, no Electron.
+Vapor polls every 5 seconds and does nothing in between. No background threads, no telemetry, no Electron.
 
 ---
 
 ## How it works
 
-**Temperatures** — read directly from the System Management Controller (SMC) via IOKit. On first launch stamon enumerates all SMC keys once and caches the ones that look like CPU (`Tp*`) or GPU (`Tg*`) sensors. Every poll after that is a handful of IOKit struct calls against the cached key list.
+**Temperatures** — read directly from the System Management Controller (SMC) via IOKit. On first launch Vapor enumerates all SMC keys once and caches the ones that look like CPU (`Tp*`) or GPU (`Tg*`) sensors. Every poll after that is a handful of IOKit struct calls against the cached key list.
 
-**CPU usage** — `host_statistics` with `HOST_CPU_LOAD_INFO` returns cumulative tick counters (user / system / idle / nice). stamon diffs two consecutive snapshots to get a percentage.
+**CPU usage** — `host_statistics` with `HOST_CPU_LOAD_INFO` returns cumulative tick counters (user / system / idle / nice). Vapor diffs two consecutive snapshots to get a percentage.
 
 **RAM usage** — `host_statistics64` with `HOST_VM_INFO64` gives page counts for active, wired, and compressed memory. Multiplied by page size and divided by total physical memory from `sysctl`.
 
@@ -42,7 +42,7 @@ All of this runs on the main thread inside a winit event loop set to `Activation
 
 ## Toggle menu
 
-Click the menu bar title to open a dropdown. Each stat has a checkmark item — uncheck it and stamon skips that system query entirely until you turn it back on.
+Click the menu bar title to open a dropdown. Each stat has a checkmark item — uncheck it and Vapor skips that system query entirely until you turn it back on.
 
 ---
 
@@ -51,17 +51,17 @@ Click the menu bar title to open a dropdown. Each stat has a checkmark item — 
 Install as a launchd agent so it starts automatically at login:
 
 ```xml
-<!-- ~/Library/LaunchAgents/com.stamon.plist -->
+<!-- ~/Library/LaunchAgents/com.Vapor.plist -->
 <key>ProgramArguments</key>
 <array>
-    <string>/path/to/stamon/target/release/stamon</string>
+    <string>/path/to/Vapor/target/release/Vapor</string>
 </array>
 <key>RunAtLoad</key><true/>
 <key>KeepAlive</key><true/>
 ```
 
 ```sh
-launchctl load ~/Library/LaunchAgents/com.stamon.plist
+launchctl load ~/Library/LaunchAgents/com.Vapor.plist
 ```
 
 ---

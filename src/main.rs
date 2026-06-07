@@ -62,7 +62,7 @@ impl ApplicationHandler for App {
         let gpu_use  = check("GPU Usage");
         let ram      = check("RAM Usage");
 
-        let quit = MenuItem::new("Quit stamon", true, None::<Accelerator>);
+        let quit = MenuItem::new("Quit Vapor", true, None::<Accelerator>);
         self.quit_id = Some(quit.id().clone());
 
         let menu = Menu::new();
