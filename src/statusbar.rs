@@ -83,9 +83,9 @@ unsafe fn text_attrs(font: *mut AnyObject, color: *mut AnyObject) -> *mut AnyObj
 
 // ── Box rendering ─────────────────────────────────────────────────────────────
 
-const BOX_H:    f64 = 20.0;
-const BOX_W:    f64 = 84.0;
-const CORNER:   f64 = 4.0;
+const BOX_H:     f64 = 20.0;
+const MIN_BOX_W: f64 = 44.0;
+const CORNER:    f64 = 4.0;
 const GAP:      f64 = 3.0;
 const PAD_X:    f64 = 7.0;
 const LABEL_PT: f64 = 7.5;
@@ -100,7 +100,30 @@ pub struct BoxSpec<'a> {
 // Returns a +1 retained NSImage — caller must release.
 unsafe fn render_boxes(boxes: &[BoxSpec<'_>]) -> *mut AnyObject {
     let n = boxes.len();
-    let total_w = if n == 0 { 1.0 } else { BOX_W * n as f64 + GAP * (n - 1) as f64 };
+
+    let lf = bold_font(LABEL_PT);
+    let vf = sys_font(VALUE_PT);
+    let wc = white_color();
+
+    // Measure each value string before creating the image so we know its size.
+    // sizeWithAttributes: is a pure text-metric call; no drawing context needed.
+    let va_tmp = text_attrs(vf, wc);
+    let widths: Vec<f64> = boxes
+        .iter()
+        .map(|b| {
+            let vs = nsstr(b.value);
+            let tsz: NSSize = msg_send![vs, sizeWithAttributes: va_tmp];
+            let _: () = msg_send![vs, release];
+            (PAD_X * 2.0 + tsz.width + 28.0).max(MIN_BOX_W)
+        })
+        .collect();
+    let _: () = msg_send![va_tmp, release];
+
+    let total_w = if n == 0 {
+        1.0
+    } else {
+        widths.iter().sum::<f64>() + GAP * (n - 1) as f64
+    };
 
     let alloc: *mut AnyObject = msg_send![cls("NSImage"), alloc];
     let image: *mut AnyObject = msg_send![alloc, initWithSize: sz(total_w, BOX_H)];
@@ -113,18 +136,13 @@ unsafe fn render_boxes(boxes: &[BoxSpec<'_>]) -> *mut AnyObject {
     let _: () = msg_send![clear_color(), set];
     let _: () = msg_send![path_cls, fillRect: rc(0.0, 0.0, total_w, BOX_H)];
 
-    let lf = bold_font(LABEL_PT);
-    let vf = sys_font(VALUE_PT);
-    let wc = white_color();
-
-    for (i, b) in boxes.iter().enumerate() {
-        let x = i as f64 * (BOX_W + GAP);
-
+    let mut x = 0.0_f64;
+    for (b, &bw) in boxes.iter().zip(widths.iter()) {
         // Rounded dark background
         let _: () = msg_send![dark_color(), setFill];
         let path: *mut AnyObject = msg_send![
             path_cls,
-            bezierPathWithRoundedRect: rc(x, 0.0, BOX_W, BOX_H),
+            bezierPathWithRoundedRect: rc(x, 0.0, bw, BOX_H),
             xRadius: CORNER,
             yRadius: CORNER
         ];
@@ -142,10 +160,12 @@ unsafe fn render_boxes(boxes: &[BoxSpec<'_>]) -> *mut AnyObject {
         let va = text_attrs(vf, wc);
         let vs = nsstr(b.value);
         let vsz: NSSize = msg_send![vs, sizeWithAttributes: va];
-        let vx = x + BOX_W - PAD_X - vsz.width;
+        let vx = x + bw - PAD_X - vsz.width;
         let _: () = msg_send![vs, drawAtPoint: pt(vx, 2.5), withAttributes: va];
         let _: () = msg_send![vs, release];
         let _: () = msg_send![va, release];
+
+        x += bw + GAP;
     }
 
     let _: () = msg_send![image, unlockFocus];
