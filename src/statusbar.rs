@@ -62,7 +62,7 @@ unsafe fn white_color() -> *mut AnyObject {
 }
 
 unsafe fn dark_color() -> *mut AnyObject {
-    msg_send![cls("NSColor"), colorWithRed: 0.17f64, green: 0.17f64, blue: 0.17f64, alpha: 0.88f64]
+    msg_send![cls("NSColor"), colorWithRed: 0.17f64, green: 0.17f64, blue: 0.17f64, alpha: 0.62f64]
 }
 
 unsafe fn clear_color() -> *mut AnyObject {
