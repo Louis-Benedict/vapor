@@ -6,7 +6,7 @@
 
 A minimal macOS menu bar app that shows system stats. Written in Rust.
 
-I built this because every stat app I tried seems to hog a lot of resources themselves - I wanted an app that does not peek at me when I inspect my resource monitor. Vapor does this in a few hundred lines of Rust with a fraction of the footprint of other apps.
+macOS offers a wide variety of sophisticated monitoring tools packed with heavy features. Vapor isn’t built to compete with them; instead, it offers the cleanest, most minimal, and—most importantly—efficient take on a system monitor. It’s designed for users who want to occasionally glance at their resources without paying the performance price of running a full-fledged monitoring suite permanently in the background.
 
 > **Note:** Only tested on Apple M5 Pro. Apple Silicon is required for the GPU temperature and usage readings (they rely on SMC keys and IOAccelerator properties that differ on Intel).
 
@@ -22,7 +22,7 @@ Approximate idle footprint compared to popular alternatives:
 | Stats (open source) | ~100–200 MB | 2–6% | 42 MB |
 | **Vapor** | **~20 MB** | **~0.3%** | **500 KB** |
 
-Vapor polls every 5 seconds and does nothing in between. No background threads, no telemetry, no Electron.
+Reference Machine: Macbook Pro M5 Pro 18C/20C 24GB
 
 ---
 
