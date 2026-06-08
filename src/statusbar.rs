@@ -1,5 +1,7 @@
 #![allow(non_snake_case, unsafe_op_in_unsafe_fn)]
 
+use std::time::Duration;
+
 use muda::ContextMenu as _;
 use objc2::encode::{Encode, Encoding, RefEncode};
 use objc2::runtime::{AnyClass, AnyObject};
@@ -148,6 +150,104 @@ unsafe fn render_boxes(boxes: &[BoxSpec<'_>]) -> *mut AnyObject {
 
     let _: () = msg_send![image, unlockFocus];
     image
+}
+
+// ── Poll-interval slider ──────────────────────────────────────────────────────
+
+pub struct PollSlider {
+    slider: *mut AnyObject, // non-owning; kept alive by the view hierarchy
+    label:  *mut AnyObject,
+}
+
+unsafe impl Send for PollSlider {}
+
+impl PollSlider {
+    /// Builds a labelled slider NSMenuItem and appends it to the menu's NSMenu.
+    pub unsafe fn append_to(menu: &muda::Menu) -> Self {
+        const W:    f64 = 260.0;
+        const H:    f64 = 46.0;
+        const PAD:  f64 = 12.0;
+        const INIT: f64 = 5.0;
+
+        let ns_menu = menu.ns_menu() as *mut AnyObject;
+
+        // ── "Refresh Rate" title ──────────────────────────────────────────────
+        let a: *mut AnyObject = msg_send![cls("NSTextField"), alloc];
+        let title_tf: *mut AnyObject = msg_send![a, initWithFrame: rc(PAD, 28.0, 100.0, 14.0)];
+        let s = nsstr("Refresh Rate");
+        let _: () = msg_send![title_tf, setStringValue: s];
+        let _: () = msg_send![s, release];
+        let _: () = msg_send![title_tf, setEditable: 0u8];
+        let _: () = msg_send![title_tf, setBordered: 0u8];
+        let _: () = msg_send![title_tf, setDrawsBackground: 0u8];
+        let _: () = msg_send![title_tf, setFont: sys_font(11.0)];
+        let c: *mut AnyObject = msg_send![cls("NSColor"), secondaryLabelColor];
+        let _: () = msg_send![title_tf, setTextColor: c];
+
+        // ── value label (updated each poll) ──────────────────────────────────
+        let a: *mut AnyObject = msg_send![cls("NSTextField"), alloc];
+        let val_tf: *mut AnyObject = msg_send![a, initWithFrame: rc(W - PAD - 42.0, 28.0, 42.0, 14.0)];
+        let s = nsstr("5.0s");
+        let _: () = msg_send![val_tf, setStringValue: s];
+        let _: () = msg_send![s, release];
+        let _: () = msg_send![val_tf, setEditable: 0u8];
+        let _: () = msg_send![val_tf, setBordered: 0u8];
+        let _: () = msg_send![val_tf, setDrawsBackground: 0u8];
+        let _: () = msg_send![val_tf, setAlignment: 1usize]; // NSTextAlignmentRight
+        let _: () = msg_send![val_tf, setFont: sys_font(11.0)];
+        let c: *mut AnyObject = msg_send![cls("NSColor"), labelColor];
+        let _: () = msg_send![val_tf, setTextColor: c];
+
+        // ── slider ────────────────────────────────────────────────────────────
+        let a: *mut AnyObject = msg_send![cls("NSSlider"), alloc];
+        let slider: *mut AnyObject =
+            msg_send![a, initWithFrame: rc(PAD, 6.0, W - PAD * 2.0, 20.0)];
+        let _: () = msg_send![slider, setMinValue: 0.5f64];
+        let _: () = msg_send![slider, setMaxValue: 10.0f64];
+        let _: () = msg_send![slider, setDoubleValue: INIT];
+
+        // ── container view ────────────────────────────────────────────────────
+        let a: *mut AnyObject = msg_send![cls("NSView"), alloc];
+        let view: *mut AnyObject = msg_send![a, initWithFrame: rc(0.0, 0.0, W, H)];
+        let _: () = msg_send![view, addSubview: title_tf];
+        let _: () = msg_send![title_tf, release];
+        let _: () = msg_send![view, addSubview: val_tf];
+        let _: () = msg_send![val_tf, release]; // view retains; we keep a non-owning ptr
+        let _: () = msg_send![view, addSubview: slider];
+        let _: () = msg_send![slider, release]; // same
+
+        // ── NSMenuItem ────────────────────────────────────────────────────────
+        let a: *mut AnyObject = msg_send![cls("NSMenuItem"), alloc];
+        let item: *mut AnyObject = msg_send![a, init];
+        let _: () = msg_send![item, setView: view];
+        let _: () = msg_send![view, release];
+        let _: () = msg_send![ns_menu, addItem: item];
+        let _: () = msg_send![item, release];
+
+        PollSlider { slider, label: val_tf }
+    }
+
+    /// Current slider position as a poll interval.
+    pub fn interval(&self) -> Duration {
+        let secs: f64 = unsafe { msg_send![self.slider, doubleValue] };
+        Duration::from_secs_f64(secs.clamp(0.5, 10.0))
+    }
+
+    /// Refreshes the value label to match the slider's current position.
+    /// Call once per poll so the label is correct next time the menu opens.
+    pub fn sync_label(&self) {
+        let secs: f64 = unsafe { msg_send![self.slider, doubleValue] };
+        let text = if secs < 1.0 {
+            format!("{}ms", (secs * 1000.0).round() as u32)
+        } else {
+            format!("{:.1}s", secs)
+        };
+        unsafe {
+            let s = nsstr(&text);
+            let _: () = msg_send![self.label, setStringValue: s];
+            let _: () = msg_send![s, release];
+        }
+    }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
