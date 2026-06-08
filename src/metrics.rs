@@ -1,5 +1,5 @@
 use std::os::raw::{c_char, c_void};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 #[link(name = "IOKit", kind = "framework")]
 unsafe extern "C" {}
@@ -210,6 +210,8 @@ fn gpu_usage_pct() -> Option<f32> {
 // ── public API ────────────────────────────────────────────────────────────────
 
 static PREV_TICKS: Mutex<Option<[u32; 4]>> = Mutex::new(None);
+static PAGE_SIZE: OnceLock<u64> = OnceLock::new();
+static MEM_SIZE: OnceLock<u64> = OnceLock::new();
 
 pub struct MetricsFlags {
     pub cpu_usage: bool,
@@ -255,8 +257,8 @@ pub fn read_metrics(flags: MetricsFlags) -> Metrics {
     // ── RAM usage ─────────────────────────────────────────────────────────────
     const GB: f32 = 1_073_741_824.0;
     let (ram_used_gb, ram_total_gb) = if flags.ram {
-        let page_bytes = sysctl_u32(b"hw.pagesize\0") as u64;
-        let total_bytes = sysctl_u64(b"hw.memsize\0");
+        let page_bytes = *PAGE_SIZE.get_or_init(|| sysctl_u32(b"hw.pagesize\0") as u64);
+        let total_bytes = *MEM_SIZE.get_or_init(|| sysctl_u64(b"hw.memsize\0"));
         if let Some(vm) = get_vm_stats() {
             let used_pages =
                 vm.active_count as u64 + vm.wire_count as u64 + vm.compressor_page_count as u64;
